@@ -91,11 +91,11 @@ genpasswd_ex history <SERVICE>
 ```
 $ genpasswd_ex history github
 History for "github":
-  ID  Username              Created At                         Password
+  ID  Username              Password              Created At
 --------------------------------------------------------------------------------
-   7  octocat               2026-07-07T08:07:54.151484+09:00  YWXWA3xS402Wl5JKMmsQ
-   5  octocat               2026-07-07T08:06:01.893545+09:00  9Jn2UoOc5EMMofvB
-   1  -                     2026-07-07T08:01:39.249806+09:00  (*>asM70MQrmdd1mM5bT
+   7  octocat               YWXWA3xS402Wl5JKMmsQ  2026-07-07T08:07:54.151484+09:00
+   5  octocat               9Jn2UoOc5EMMofvB      2026-07-07T08:06:01.893545+09:00
+   1  -                     (*>asM70MQrmdd1mM5bT  2026-07-07T08:01:39.249806+09:00
 ```
 
 新しいパスワードが先頭に表示されます。ユーザ名未設定の場合は `-` と表示されます。
@@ -110,10 +110,10 @@ genpasswd_ex list
 
 ```
 $ genpasswd_ex list
-Service                        Count
-----------------------------------------
-aws                            2
-github                         4
+Service  Count
+---------------
+aws          2
+github       4
 ```
 
 ---
