@@ -100,6 +100,23 @@ impl Db {
         Ok(rows)
     }
 
+    /// 指定IDのユーザ名・パスワードを更新（None の項目は変更しない）
+    pub fn update_entry(
+        &self,
+        id: i64,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<usize> {
+        let n = self.conn.execute(
+            "UPDATE password_history
+             SET username = COALESCE(?2, username),
+                 password = COALESCE(?3, password)
+             WHERE id = ?1",
+            params![id, username, password],
+        )?;
+        Ok(n)
+    }
+
     pub fn delete_service(&self, service: &str) -> Result<usize> {
         let n = self.conn.execute(
             "DELETE FROM password_history WHERE service = ?1",

@@ -137,6 +137,32 @@ Registered to history for service "github" (user: octocat).
 
 ---
 
+### 履歴のユーザ名・パスワードを更新する
+
+```
+genpasswd_ex update <ID> [--username <ユーザ名>] [--password <パスワード>]
+```
+
+| 引数/オプション | 短縮 | 説明 |
+|---|---|---|
+| `ID` | — | 更新する履歴のID（`history` で確認） |
+| `--username` | `-u` | 新しいユーザ名 |
+| `--password` | `-p` | 新しいパスワード |
+
+`-u` と `-p` の少なくとも一方が必要です。指定しなかった項目は変更されません。
+
+```
+$ genpasswd_ex update 16 -u octocat
+Updated history entry ID 16.
+
+$ genpasswd_ex update 15 -p 'C$Y3xvqiRsHF2H.'
+Updated history entry ID 15.
+```
+
+`$` などを含むパスワードはシェルに展開されないようシングルクォートで囲んでください。
+
+---
+
 ### サービスの履歴を削除する
 
 ```
