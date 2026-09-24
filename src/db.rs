@@ -51,6 +51,22 @@ impl Db {
         Ok(())
     }
 
+    /// サービスの履歴から最新の空でないユーザ名を取得
+    pub fn latest_username(&self, service: &str) -> Result<Option<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT username
+             FROM password_history
+             WHERE service = ?1 AND username <> ''
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![service])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(row.get(0)?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn get_history(&self, service: &str) -> Result<Vec<PasswordEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, username, password, created_at
@@ -82,6 +98,23 @@ impl Db {
             .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?)))?
             .collect::<Result<Vec<_>>>()?;
         Ok(rows)
+    }
+
+    /// 指定IDのユーザ名・パスワードを更新（None の項目は変更しない）
+    pub fn update_entry(
+        &self,
+        id: i64,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<usize> {
+        let n = self.conn.execute(
+            "UPDATE password_history
+             SET username = COALESCE(?2, username),
+                 password = COALESCE(?3, password)
+             WHERE id = ?1",
+            params![id, username, password],
+        )?;
+        Ok(n)
     }
 
     pub fn delete_service(&self, service: &str) -> Result<usize> {
