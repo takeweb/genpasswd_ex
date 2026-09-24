@@ -62,7 +62,7 @@ genpasswd_ex save <SERVICE> [--username <ユーザ名>] [--length <長さ>] [--s
 | 引数/オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
 | `SERVICE` | — | 必須 | サービス名 |
-| `--username` | `-u` | 空 | サービスのユーザ名 |
+| `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 | `--length` | `-l` | 16 | パスワードの文字数 |
 | `--symbols` | なし | off | 記号を含める |
 
@@ -128,7 +128,7 @@ genpasswd_ex register <SERVICE> <PASSWORD> [--username <ユーザ名>]
 |---|---|---|---|
 | `SERVICE` | — | 必須 | サービス名 |
 | `PASSWORD` | — | 必須 | 登録するパスワード |
-| `--username` | `-u` | 空 | サービスのユーザ名 |
+| `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 
 ```
 $ genpasswd_ex register github myP@ssw0rd --username octocat

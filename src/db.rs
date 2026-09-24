@@ -51,6 +51,22 @@ impl Db {
         Ok(())
     }
 
+    /// サービスの履歴から最新の空でないユーザ名を取得
+    pub fn latest_username(&self, service: &str) -> Result<Option<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT username
+             FROM password_history
+             WHERE service = ?1 AND username <> ''
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![service])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(row.get(0)?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn get_history(&self, service: &str) -> Result<Vec<PasswordEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, username, password, created_at

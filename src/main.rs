@@ -6,7 +6,17 @@ use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Parser)]
-#[command(author, version, about = "Secure Password Generator with History")]
+#[command(
+    author,
+    version,
+    about = "Secure Password Generator with History",
+    after_help = "Examples:
+  genpasswd_ex save <SERVICE> -u <USERNAME> [-l <LENGTH>] [--symbols]
+  genpasswd_ex register <SERVICE> '<PASSWORD>' -u <USERNAME>
+  genpasswd_ex history <SERVICE>
+
+Run 'genpasswd_ex <COMMAND> -h' for command-specific options."
+)]
 struct Args {
     /// Password length
     #[arg(short, long, default_value_t = 16)]
@@ -22,11 +32,11 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate a password and save to history
+    /// Generate a password and save to history (-u <USERNAME>)
     Save {
         /// Service name
         service: String,
-        /// Username for the service
+        /// Username for the service (defaults to the latest one in history)
         #[arg(short, long, default_value = "")]
         username: String,
         /// Password length
@@ -43,13 +53,13 @@ enum Command {
     },
     /// List all services with saved passwords
     List,
-    /// Register an existing password to history
+    /// Register an existing password to history (-u <USERNAME>)
     Register {
         /// Service name
         service: String,
         /// Password to register
         password: String,
-        /// Username for the service
+        /// Username for the service (defaults to the latest one in history)
         #[arg(short, long, default_value = "")]
         username: String,
     },
@@ -64,6 +74,16 @@ fn pad(s: &str, width: usize) -> String {
     let display_width = s.width();
     let spaces = width.saturating_sub(display_width);
     format!("{}{}", s, " ".repeat(spaces))
+}
+
+/// ユーザ名が省略された場合、同じサービスの履歴にある最新のユーザ名を使う
+fn resolve_username(db: &db::Db, service: &str, username: String) -> String {
+    if !username.is_empty() {
+        return username;
+    }
+    db.latest_username(service)
+        .expect("Failed to read history")
+        .unwrap_or_default()
 }
 
 fn db_path() -> PathBuf {
@@ -103,6 +123,7 @@ fn main() {
             println!("Generated password: {}", pwd);
 
             let db = db::Db::open(&db_path()).expect("Failed to open database");
+            let username = resolve_username(&db, &service, username);
             db.save(&service, &username, &pwd).expect("Failed to save password");
             if username.is_empty() {
                 eprintln!("Saved to history for service \"{}\".", service);
@@ -113,6 +134,7 @@ fn main() {
 
         Some(Command::Register { service, password, username }) => {
             let db = db::Db::open(&db_path()).expect("Failed to open database");
+            let username = resolve_username(&db, &service, username);
             db.save(&service, &username, &password).expect("Failed to save password");
             if username.is_empty() {
                 println!("Registered to history for service \"{}\".", service);
