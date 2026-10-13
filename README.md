@@ -33,63 +33,71 @@ cargo build --release
 ### パスワードを生成する（保存しない）
 
 ```
-genpasswd_ex [--length <長さ>] [--symbols]
+genpasswd_ex [--length <長さ>] [--symbols] [--no-copy]
 ```
 
 | オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
 | `--length` | `-l` | 16 | パスワードの文字数 |
-| `--symbols` | なし | off | 記号を含める |
+| `--symbols` | `-k` | off | 記号を含める |
+| `--no-copy` | `-n` | off | クリップボードにコピーしない |
 
 ```
 # 16文字（デフォルト）
 $ genpasswd_ex
 Generated password: TDeXIVCda7bEWQts
+Copied to clipboard.
 
 # 24文字・記号あり
 $ genpasswd_ex --length 24 --symbols
 Generated password: ]]:dwmstZjQ9scuU1qLRLgLQ
+Copied to clipboard.
 ```
+
+生成されたパスワードは自動でクリップボードにコピーされます（macOS は `pbcopy`、Linux は `wl-copy` / `xclip` / `xsel` を使用）。コピーに失敗した場合は警告を表示し、処理は続行します。
 
 ---
 
 ### パスワードを生成して履歴に保存する
 
 ```
-genpasswd_ex save <SERVICE> [--username <ユーザ名>] [--length <長さ>] [--symbols]
+genpasswd_ex save --service <SERVICE> [--username <ユーザ名>] [--length <長さ>] [--symbols] [--no-copy]
 ```
 
 | 引数/オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
-| `SERVICE` | — | 必須 | サービス名 |
+| `--service` | `-s` | 必須 | サービス名 |
 | `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 | `--length` | `-l` | 16 | パスワードの文字数 |
-| `--symbols` | なし | off | 記号を含める |
+| `--symbols` | `-k` | off | 記号を含める |
+| `--no-copy` | `-n` | off | クリップボードにコピーしない |
 
 ```
 # ユーザ名なし
-$ genpasswd_ex save github
+$ genpasswd_ex save -s github
 Generated password: CW5HsZlYxIib2Ut4
+Copied to clipboard.
 Saved to history for service "github".
 
 # ユーザ名あり・20文字・記号あり
-$ genpasswd_ex save github --username octocat --length 20 --symbols
+$ genpasswd_ex save -s github --username octocat --length 20 --symbols
 Generated password: (*>asM70MQrmdd1mM5bT
+Copied to clipboard.
 Saved to history for service "github" (user: octocat).
 ```
 
-生成されたパスワードは標準出力、保存メッセージは標準エラー出力に書き出されます。
+生成されたパスワードは標準出力、コピー・保存メッセージは標準エラー出力に書き出されます。
 
 ---
 
 ### サービスの履歴を確認する
 
 ```
-genpasswd_ex history <SERVICE>
+genpasswd_ex history --service <SERVICE>
 ```
 
 ```
-$ genpasswd_ex history github
+$ genpasswd_ex history -s github
 History for "github":
   ID  Username              Password              Created At
 --------------------------------------------------------------------------------
@@ -121,17 +129,17 @@ github       4
 ### 既存のパスワードを履歴に登録する
 
 ```
-genpasswd_ex register <SERVICE> <PASSWORD> [--username <ユーザ名>]
+genpasswd_ex register --service <SERVICE> <PASSWORD> [--username <ユーザ名>]
 ```
 
 | 引数/オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
-| `SERVICE` | — | 必須 | サービス名 |
+| `--service` | `-s` | 必須 | サービス名 |
 | `PASSWORD` | — | 必須 | 登録するパスワード |
 | `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 
 ```
-$ genpasswd_ex register github myP@ssw0rd --username octocat
+$ genpasswd_ex register -s github myP@ssw0rd --username octocat
 Registered to history for service "github" (user: octocat).
 ```
 
@@ -166,11 +174,11 @@ Updated history entry ID 15.
 ### サービスの履歴を削除する
 
 ```
-genpasswd_ex delete <SERVICE>
+genpasswd_ex delete --service <SERVICE>
 ```
 
 ```
-$ genpasswd_ex delete aws
+$ genpasswd_ex delete -s aws
 Deleted 2 record(s) for service "aws".
 ```
 

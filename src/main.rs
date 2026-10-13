@@ -1,3 +1,4 @@
+mod clipboard;
 mod db;
 mod password;
 
@@ -11,9 +12,10 @@ use unicode_width::UnicodeWidthStr;
     version,
     about = "Secure Password Generator with History",
     after_help = "Examples:
-  genpasswd_ex save <SERVICE> -u <USERNAME> [-l <LENGTH>] [--symbols]
-  genpasswd_ex register <SERVICE> '<PASSWORD>' -u <USERNAME>
-  genpasswd_ex history <SERVICE>
+  genpasswd_ex save -s <SERVICE> -u <USERNAME> [-l <LENGTH>] [-k] [-n]
+  genpasswd_ex register -s <SERVICE> '<PASSWORD>' -u <USERNAME>
+  genpasswd_ex history -s <SERVICE>
+  genpasswd_ex delete -s <SERVICE>
   genpasswd_ex update <ID> [-u <USERNAME>] [-p '<PASSWORD>']
 
 Run 'genpasswd_ex <COMMAND> -h' for command-specific options."
@@ -24,8 +26,12 @@ struct Args {
     length: usize,
 
     /// Include symbols
-    #[arg(long)]
+    #[arg(short = 'k', long)]
     symbols: bool,
+
+    /// Do not copy the generated password to the clipboard
+    #[arg(short, long)]
+    no_copy: bool,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -33,9 +39,10 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate a password and save to history (-u <USERNAME>)
+    /// Generate a password and save to history (-s <SERVICE> [-u <USERNAME>])
     Save {
         /// Service name
+        #[arg(short, long)]
         service: String,
         /// Username for the service (defaults to the latest one in history)
         #[arg(short, long, default_value = "")]
@@ -44,19 +51,24 @@ enum Command {
         #[arg(short, long, default_value_t = 16)]
         length: usize,
         /// Include symbols
-        #[arg(long)]
+        #[arg(short = 'k', long)]
         symbols: bool,
+        /// Do not copy the generated password to the clipboard
+        #[arg(short, long)]
+        no_copy: bool,
     },
-    /// Show password history for a service
+    /// Show password history for a service (-s <SERVICE>)
     History {
         /// Service name
+        #[arg(short, long)]
         service: String,
     },
     /// List all services with saved passwords
     List,
-    /// Register an existing password to history (-u <USERNAME>)
+    /// Register an existing password to history (-s <SERVICE> <PASSWORD> [-u <USERNAME>])
     Register {
         /// Service name
+        #[arg(short, long)]
         service: String,
         /// Password to register
         password: String,
@@ -78,9 +90,10 @@ enum Command {
         #[arg(short, long)]
         password: Option<String>,
     },
-    /// Delete all history for a service
+    /// Delete all history for a service (-s <SERVICE>)
     Delete {
         /// Service name
+        #[arg(short, long)]
         service: String,
     },
 }
@@ -99,6 +112,14 @@ fn resolve_username(db: &db::Db, service: &str, username: String) -> String {
     db.latest_username(service)
         .expect("Failed to read history")
         .unwrap_or_default()
+}
+
+/// 生成したパスワードをクリップボードにコピーする（失敗しても処理は続行）
+fn copy_to_clipboard(pwd: &str) {
+    match clipboard::copy(pwd) {
+        Ok(()) => eprintln!("Copied to clipboard."),
+        Err(e) => eprintln!("Warning: failed to copy to clipboard ({}).", e),
+    }
 }
 
 fn db_path() -> PathBuf {
@@ -126,16 +147,23 @@ fn main() {
                 eprintln!("Error: password length must be at least 4.");
                 std::process::exit(1);
             }
-            println!("Generated password: {}", password::generate_password(args.length, args.symbols));
+            let pwd = password::generate_password(args.length, args.symbols);
+            println!("Generated password: {}", pwd);
+            if !args.no_copy {
+                copy_to_clipboard(&pwd);
+            }
         }
 
-        Some(Command::Save { service, username, length, symbols }) => {
+        Some(Command::Save { service, username, length, symbols, no_copy }) => {
             if length < 4 {
                 eprintln!("Error: password length must be at least 4.");
                 std::process::exit(1);
             }
             let pwd = password::generate_password(length, symbols);
             println!("Generated password: {}", pwd);
+            if !no_copy {
+                copy_to_clipboard(&pwd);
+            }
 
             let db = db::Db::open(&db_path()).expect("Failed to open database");
             let username = resolve_username(&db, &service, username);
