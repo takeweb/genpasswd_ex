@@ -1,4 +1,5 @@
 mod clipboard;
+mod crypto;
 mod db;
 mod password;
 
@@ -17,6 +18,8 @@ use unicode_width::UnicodeWidthStr;
   genpasswd_ex history -s <SERVICE>
   genpasswd_ex delete -s <SERVICE>
   genpasswd_ex update <ID> [-u <USERNAME>] [-p '<PASSWORD>']
+
+Passwords are encrypted with a key stored in the macOS keychain.
 
 Run 'genpasswd_ex <COMMAND> -h' for command-specific options."
 )]
@@ -90,6 +93,8 @@ enum Command {
         #[arg(short, long)]
         password: Option<String>,
     },
+    /// Encrypt plaintext passwords saved by older versions
+    Encrypt,
     /// Delete all history for a service (-s <SERVICE>)
     Delete {
         /// Service name
@@ -122,6 +127,14 @@ fn copy_to_clipboard(pwd: &str) {
     }
 }
 
+/// 暗号化鍵を読み込む（失敗したら終了）
+fn load_cipher() -> crypto::Cipher {
+    crypto::Cipher::load().unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    })
+}
+
 fn db_path() -> PathBuf {
     if let Ok(path) = std::env::var("GENPASSWD_EX_DB") {
         return PathBuf::from(path);
@@ -130,6 +143,12 @@ fn db_path() -> PathBuf {
     let home = dirs::home_dir().expect("Cannot determine home directory");
     let dir = home.join(".local/share/genpasswd_ex");
     std::fs::create_dir_all(&dir).expect("Failed to create data directory");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+            .expect("Failed to set permissions of data directory");
+    }
     if cfg!(debug_assertions) {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("history_dev.db")
     } else {
@@ -165,9 +184,10 @@ fn main() {
                 copy_to_clipboard(&pwd);
             }
 
+            let cipher = load_cipher();
             let db = db::Db::open(&db_path()).expect("Failed to open database");
             let username = resolve_username(&db, &service, username);
-            db.save(&service, &username, &pwd).expect("Failed to save password");
+            db.save(&service, &username, &cipher.encrypt(&pwd)).expect("Failed to save password");
             if username.is_empty() {
                 eprintln!("Saved to history for service \"{}\".", service);
             } else {
@@ -176,9 +196,10 @@ fn main() {
         }
 
         Some(Command::Register { service, password, username }) => {
+            let cipher = load_cipher();
             let db = db::Db::open(&db_path()).expect("Failed to open database");
             let username = resolve_username(&db, &service, username);
-            db.save(&service, &username, &password).expect("Failed to save password");
+            db.save(&service, &username, &cipher.encrypt(&password)).expect("Failed to save password");
             if username.is_empty() {
                 println!("Registered to history for service \"{}\".", service);
             } else {
@@ -192,12 +213,14 @@ fn main() {
             if entries.is_empty() {
                 println!("No history for service \"{}\".", service);
             } else {
+                let cipher = load_cipher();
                 println!("History for \"{}\":", service);
                 println!("{:>4}  {:<20}  {:<20}  {}", "ID", "Username", "Password", "Created At");
                 println!("{}", "-".repeat(80));
                 for e in &entries {
                     let user = if e.username.is_empty() { "-".to_string() } else { e.username.clone() };
-                    println!("{:>4}  {:<20}  {:<20}  {}", e.id, user, e.password, e.created_at);
+                    let pwd = cipher.decrypt(&e.password).unwrap_or_else(|err| format!("<{}>", err));
+                    println!("{:>4}  {:<20}  {:<20}  {}", e.id, user, pwd, e.created_at);
                 }
             }
         }
@@ -222,6 +245,7 @@ fn main() {
         }
 
         Some(Command::Update { id, username, password }) => {
+            let password = password.map(|p| load_cipher().encrypt(&p));
             let db = db::Db::open(&db_path()).expect("Failed to open database");
             let n = db
                 .update_entry(id, username.as_deref(), password.as_deref())
@@ -231,6 +255,24 @@ fn main() {
                 std::process::exit(1);
             }
             println!("Updated history entry ID {}.", id);
+        }
+
+        Some(Command::Encrypt) => {
+            let cipher = load_cipher();
+            let mut db = db::Db::open(&db_path()).expect("Failed to open database");
+            let rows: Vec<(i64, String)> = db
+                .all_passwords()
+                .expect("Failed to read history")
+                .into_iter()
+                .filter(|(_, pwd)| !crypto::is_encrypted(pwd))
+                .map(|(id, pwd)| (id, cipher.encrypt(&pwd)))
+                .collect();
+            if rows.is_empty() {
+                println!("All passwords are already encrypted.");
+            } else {
+                db.replace_passwords(&rows).expect("Failed to encrypt passwords");
+                println!("Encrypted {} password(s).", rows.len());
+            }
         }
 
         Some(Command::Delete { service }) => {
