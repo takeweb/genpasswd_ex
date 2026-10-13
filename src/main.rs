@@ -16,6 +16,7 @@ use unicode_width::UnicodeWidthStr;
   genpasswd_ex save -s <SERVICE> -u <USERNAME> [-l <LENGTH>] [-k] [-n]
   genpasswd_ex register -s <SERVICE> '<PASSWORD>' -u <USERNAME>
   genpasswd_ex history [-s <SERVICE>]
+  genpasswd_ex rename -s <SERVICE> <NEW_SERVICE>
   genpasswd_ex delete -s <SERVICE>
   genpasswd_ex update <ID> [-u <USERNAME>] [-p '<PASSWORD>']
 
@@ -92,6 +93,17 @@ enum Command {
         /// New password
         #[arg(short, long)]
         password: Option<String>,
+    },
+    /// Rename a service (-s <SERVICE> <NEW_SERVICE>)
+    Rename {
+        /// Current service name
+        #[arg(short, long)]
+        service: String,
+        /// New service name
+        new_service: String,
+        /// Allow renaming into an existing service (merges the histories)
+        #[arg(long)]
+        merge: bool,
     },
     /// Encrypt plaintext passwords saved by older versions
     Encrypt,
@@ -273,6 +285,28 @@ fn main() {
                 std::process::exit(1);
             }
             println!("Updated history entry ID {}.", id);
+        }
+
+        Some(Command::Rename { service, new_service, merge }) => {
+            if service == new_service {
+                eprintln!("Error: new service name is the same as the current one.");
+                std::process::exit(1);
+            }
+            let db = db::Db::open(&db_path()).expect("Failed to open database");
+            let existing = db.count_service(&new_service).expect("Failed to read history");
+            if existing > 0 && !merge {
+                eprintln!(
+                    "Error: service \"{}\" already has {} record(s). Use --merge to merge the histories.",
+                    new_service, existing
+                );
+                std::process::exit(1);
+            }
+            let n = db.rename_service(&service, &new_service).expect("Failed to rename service");
+            if n == 0 {
+                eprintln!("Error: no history found for service \"{}\".", service);
+                std::process::exit(1);
+            }
+            println!("Renamed service \"{}\" to \"{}\" ({} record(s)).", service, new_service, n);
         }
 
         Some(Command::Encrypt) => {

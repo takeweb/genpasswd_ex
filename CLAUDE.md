@@ -27,6 +27,7 @@
 - パスワードは `enc:v1:` + base64(nonce 12B + 暗号文) で保存。プレフィックスなしは旧形式の平文として扱い、`encrypt` で一括暗号化（VACUUM で旧データも消去）。
 - 鍵はキーチェーン（service `genpasswd_ex`、account は release `db-key` / debug `db-key-dev`）。`GENPASSWD_EX_KEY`（base64 32B）があれば優先。未登録（errSecItemNotFound）の場合のみ新規作成する。
 - `update <ID> [-u] [-p]` で既存レコードのユーザ名・パスワードを更新できる（`-u`/`-p` の少なくとも一方が必須、未指定項目は変更しない）。
+- `rename -s <OLD> <NEW>` でサービス名を変更。変更先に履歴がある場合はエラー（`--merge` で統合）。
 - `$` を含むパスワードはシェルで展開されるため、引数や SQL はシングルクォートで囲む（`sqlite3` はクォート付きヒアドキュメント `<<'EOF'` を使う）。
 
 ## 開発

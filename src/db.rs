@@ -160,6 +160,24 @@ impl Db {
         Ok(())
     }
 
+    /// サービスの履歴件数
+    pub fn count_service(&self, service: &str) -> Result<usize> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM password_history WHERE service = ?1",
+            params![service],
+            |row| row.get(0),
+        )
+    }
+
+    /// サービス名を変更（変更した件数を返す）
+    pub fn rename_service(&self, old: &str, new: &str) -> Result<usize> {
+        let n = self.conn.execute(
+            "UPDATE password_history SET service = ?2 WHERE service = ?1",
+            params![old, new],
+        )?;
+        Ok(n)
+    }
+
     pub fn delete_service(&self, service: &str) -> Result<usize> {
         let n = self.conn.execute(
             "DELETE FROM password_history WHERE service = ?1",

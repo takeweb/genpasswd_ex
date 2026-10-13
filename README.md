@@ -191,6 +191,27 @@ Updated history entry ID 15.
 
 ---
 
+### サービス名を変更する
+
+```
+genpasswd_ex rename --service <SERVICE> <NEW_SERVICE> [--merge]
+```
+
+| 引数/オプション | 短縮 | 説明 |
+|---|---|---|
+| `--service` | `-s` | 現在のサービス名（必須） |
+| `NEW_SERVICE` | — | 新しいサービス名（必須） |
+| `--merge` | なし | 変更先のサービスが既にある場合に履歴を統合する |
+
+```
+$ genpasswd_ex rename -s google Google
+Renamed service "google" to "Google" (1 record(s)).
+```
+
+変更先のサービス名に履歴が既にある場合は、誤って統合しないようエラーになります。統合する場合は `--merge` を指定してください。
+
+---
+
 ### サービスの履歴を削除する
 
 ```
