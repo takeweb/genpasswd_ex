@@ -15,7 +15,7 @@ use unicode_width::UnicodeWidthStr;
     after_help = "Examples:
   genpasswd_ex save -s <SERVICE> -u <USERNAME> [-l <LENGTH>] [-k] [-n]
   genpasswd_ex register -s <SERVICE> '<PASSWORD>' -u <USERNAME>
-  genpasswd_ex history -s <SERVICE>
+  genpasswd_ex history [-s <SERVICE>]
   genpasswd_ex delete -s <SERVICE>
   genpasswd_ex update <ID> [-u <USERNAME>] [-p '<PASSWORD>']
 
@@ -60,11 +60,11 @@ enum Command {
         #[arg(short, long)]
         no_copy: bool,
     },
-    /// Show password history for a service (-s <SERVICE>)
+    /// Show password history for a service (all services if -s is omitted)
     History {
-        /// Service name
+        /// Service name (omit to show all services)
         #[arg(short, long)]
-        service: String,
+        service: Option<String>,
     },
     /// List all services with saved passwords
     List,
@@ -209,11 +209,29 @@ fn main() {
 
         Some(Command::History { service }) => {
             let db = db::Db::open(&db_path()).expect("Failed to open database");
-            let entries = db.get_history(&service).expect("Failed to read history");
-            if entries.is_empty() {
-                println!("No history for service \"{}\".", service);
-            } else {
-                let cipher = load_cipher();
+            let services = match service {
+                Some(service) => vec![service],
+                None => db
+                    .list_services()
+                    .expect("Failed to list services")
+                    .into_iter()
+                    .map(|(svc, _)| svc)
+                    .collect(),
+            };
+            if services.is_empty() {
+                println!("No services found.");
+            }
+            let mut cipher = None;
+            for (i, service) in services.iter().enumerate() {
+                if i > 0 {
+                    println!();
+                }
+                let entries = db.get_history(service).expect("Failed to read history");
+                if entries.is_empty() {
+                    println!("No history for service \"{}\".", service);
+                    continue;
+                }
+                let cipher = cipher.get_or_insert_with(load_cipher);
                 println!("History for \"{}\":", service);
                 println!("{:>4}  {:<20}  {:<20}  {}", "ID", "Username", "Password", "Created At");
                 println!("{}", "-".repeat(80));

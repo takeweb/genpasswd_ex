@@ -111,8 +111,10 @@ Saved to history for service "github" (user: octocat).
 ### サービスの履歴を確認する
 
 ```
-genpasswd_ex history --service <SERVICE>
+genpasswd_ex history [--service <SERVICE>]
 ```
+
+`--service`（`-s`）を省略すると、全サービスの履歴をサービスごとに表示します。
 
 ```
 $ genpasswd_ex history -s github
