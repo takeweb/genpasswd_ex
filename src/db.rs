@@ -178,6 +178,23 @@ impl Db {
         Ok(n)
     }
 
+    /// 指定IDのレコードを削除（削除したレコードのサービス名を返す。該当なしは None）
+    pub fn delete_entry(&self, id: i64) -> Result<Option<String>> {
+        let service: Option<String> = match self.conn.query_row(
+            "SELECT service FROM password_history WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ) {
+            Ok(s) => Some(s),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e),
+        };
+        if service.is_some() {
+            self.conn.execute("DELETE FROM password_history WHERE id = ?1", params![id])?;
+        }
+        Ok(service)
+    }
+
     pub fn delete_service(&self, service: &str) -> Result<usize> {
         let n = self.conn.execute(
             "DELETE FROM password_history WHERE service = ?1",

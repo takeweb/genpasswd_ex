@@ -14,9 +14,10 @@ use unicode_width::UnicodeWidthStr;
     about = "Secure Password Generator with History",
     after_help = "Examples:
   genpasswd_ex save -s <SERVICE> -u <USERNAME> [-l <LENGTH>] [-k] [-n]
-  genpasswd_ex register -s <SERVICE> '<PASSWORD>' -u <USERNAME>
+  genpasswd_ex add -s <SERVICE> '<PASSWORD>' -u <USERNAME>
   genpasswd_ex history [-s <SERVICE>]
   genpasswd_ex rename -s <SERVICE> <NEW_SERVICE>
+  genpasswd_ex remove <ID>
   genpasswd_ex delete -s <SERVICE>
   genpasswd_ex update <ID> [-u <USERNAME>] [-p '<PASSWORD>']
 
@@ -61,20 +62,21 @@ enum Command {
         #[arg(short, long)]
         no_copy: bool,
     },
-    /// Show password history for a service (all services if -s is omitted)
+    /// Show password history for a service (all services with masked passwords if -s is omitted)
     History {
-        /// Service name (omit to show all services)
+        /// Service name (omit to show all services; passwords are masked)
         #[arg(short, long)]
         service: Option<String>,
     },
     /// List all services with saved passwords
     List,
-    /// Register an existing password to history (-s <SERVICE> <PASSWORD> [-u <USERNAME>])
-    Register {
+    /// Add an existing password to history (-s <SERVICE> <PASSWORD> [-u <USERNAME>])
+    #[command(alias = "register")]
+    Add {
         /// Service name
         #[arg(short, long)]
         service: String,
-        /// Password to register
+        /// Password to add
         password: String,
         /// Username for the service (defaults to the latest one in history)
         #[arg(short, long, default_value = "")]
@@ -107,6 +109,11 @@ enum Command {
     },
     /// Encrypt plaintext passwords saved by older versions
     Encrypt,
+    /// Remove a single history entry by ID
+    Remove {
+        /// Entry ID (shown in `history`)
+        id: i64,
+    },
     /// Delete all history for a service (-s <SERVICE>)
     Delete {
         /// Service name
@@ -207,20 +214,22 @@ fn main() {
             }
         }
 
-        Some(Command::Register { service, password, username }) => {
+        Some(Command::Add { service, password, username }) => {
             let cipher = load_cipher();
             let db = db::Db::open(&db_path()).expect("Failed to open database");
             let username = resolve_username(&db, &service, username);
             db.save(&service, &username, &cipher.encrypt(&password)).expect("Failed to save password");
             if username.is_empty() {
-                println!("Registered to history for service \"{}\".", service);
+                println!("Added to history for service \"{}\".", service);
             } else {
-                println!("Registered to history for service \"{}\" (user: {}).", service, username);
+                println!("Added to history for service \"{}\" (user: {}).", service, username);
             }
         }
 
         Some(Command::History { service }) => {
             let db = db::Db::open(&db_path()).expect("Failed to open database");
+            // 全サービス表示の時はパスワードをマスクする（復号しないのでキーチェーンにもアクセスしない）
+            let masked = service.is_none();
             let services = match service {
                 Some(service) => vec![service],
                 None => db
@@ -243,13 +252,17 @@ fn main() {
                     println!("No history for service \"{}\".", service);
                     continue;
                 }
-                let cipher = cipher.get_or_insert_with(load_cipher);
                 println!("History for \"{}\":", service);
                 println!("{:>4}  {:<20}  {:<20}  {}", "ID", "Username", "Password", "Created At");
                 println!("{}", "-".repeat(80));
                 for e in &entries {
                     let user = if e.username.is_empty() { "-".to_string() } else { e.username.clone() };
-                    let pwd = cipher.decrypt(&e.password).unwrap_or_else(|err| format!("<{}>", err));
+                    let pwd = if masked {
+                        "********".to_string()
+                    } else {
+                        let cipher = cipher.get_or_insert_with(load_cipher);
+                        cipher.decrypt(&e.password).unwrap_or_else(|err| format!("<{}>", err))
+                    };
                     println!("{:>4}  {:<20}  {:<20}  {}", e.id, user, pwd, e.created_at);
                 }
             }
@@ -324,6 +337,17 @@ fn main() {
             } else {
                 db.replace_passwords(&rows).expect("Failed to encrypt passwords");
                 println!("Encrypted {} password(s).", rows.len());
+            }
+        }
+
+        Some(Command::Remove { id }) => {
+            let db = db::Db::open(&db_path()).expect("Failed to open database");
+            match db.delete_entry(id).expect("Failed to delete history") {
+                Some(service) => println!("Removed history entry ID {} (service \"{}\").", id, service),
+                None => {
+                    eprintln!("Error: no history entry with ID {}.", id);
+                    std::process::exit(1);
+                }
             }
         }
 

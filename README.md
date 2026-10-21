@@ -114,7 +114,20 @@ Saved to history for service "github" (user: octocat).
 genpasswd_ex history [--service <SERVICE>]
 ```
 
-`--service`（`-s`）を省略すると、全サービスの履歴をサービスごとに表示します。
+`--service`（`-s`）を省略すると、全サービスの履歴をサービスごとに表示します。この場合パスワードは `********` とマスク表示されます（平文で確認するには `-s` でサービスを指定してください）。
+
+```
+$ genpasswd_ex history
+History for "aws":
+  ID  Username              Password              Created At
+--------------------------------------------------------------------------------
+   3  -                     ********              2026-07-07T08:10:12.512331+09:00
+
+History for "github":
+  ID  Username              Password              Created At
+--------------------------------------------------------------------------------
+   7  octocat               ********              2026-07-07T08:07:54.151484+09:00
+```
 
 ```
 $ genpasswd_ex history -s github
@@ -146,22 +159,24 @@ github       4
 
 ---
 
-### 既存のパスワードを履歴に登録する
+### 既存のパスワードを履歴に追加する
 
 ```
-genpasswd_ex register --service <SERVICE> <PASSWORD> [--username <ユーザ名>]
+genpasswd_ex add --service <SERVICE> <PASSWORD> [--username <ユーザ名>]
 ```
 
 | 引数/オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
 | `--service` | `-s` | 必須 | サービス名 |
-| `PASSWORD` | — | 必須 | 登録するパスワード |
+| `PASSWORD` | — | 必須 | 追加するパスワード |
 | `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 
 ```
-$ genpasswd_ex register -s github myP@ssw0rd --username octocat
-Registered to history for service "github" (user: octocat).
+$ genpasswd_ex add -s github myP@ssw0rd --username octocat
+Added to history for service "github" (user: octocat).
 ```
+
+旧コマンド名 `register` も別名として引き続き使えます。
 
 ---
 
@@ -209,6 +224,21 @@ Renamed service "google" to "Google" (1 record(s)).
 ```
 
 変更先のサービス名に履歴が既にある場合は、誤って統合しないようエラーになります。統合する場合は `--merge` を指定してください。
+
+---
+
+### 履歴を1件削除する
+
+```
+genpasswd_ex remove <ID>
+```
+
+```
+$ genpasswd_ex remove 5
+Removed history entry ID 5 (service "github").
+```
+
+ID は `history` で確認してください。
 
 ---
 
