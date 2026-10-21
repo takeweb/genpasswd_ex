@@ -128,6 +128,19 @@ fn pad(s: &str, width: usize) -> String {
     format!("{}{}", s, " ".repeat(spaces))
 }
 
+/// history のサービス見出し（`=` の罫線で囲み、端末なら太字・色付きで表示）
+fn print_service_header(service: &str, count: usize) {
+    use std::io::IsTerminal;
+
+    let title = format!("=== {} ({} record(s)) ", service, count);
+    let line = format!("{}{}", title, "=".repeat(80usize.saturating_sub(title.width())));
+    if std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() {
+        println!("\x1b[1;36m{}\x1b[0m", line);
+    } else {
+        println!("{}", line);
+    }
+}
+
 /// ユーザ名が省略された場合、同じサービスの履歴にある最新のユーザ名を使う
 fn resolve_username(db: &db::Db, service: &str, username: String) -> String {
     if !username.is_empty() {
@@ -252,7 +265,7 @@ fn main() {
                     println!("No history for service \"{}\".", service);
                     continue;
                 }
-                println!("History for \"{}\":", service);
+                print_service_header(service, entries.len());
                 println!("{:>4}  {:<20}  {:<20}  {}", "ID", "Username", "Password", "Created At");
                 println!("{}", "-".repeat(80));
                 for e in &entries {
