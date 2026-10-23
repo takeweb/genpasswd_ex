@@ -12,9 +12,29 @@ pub struct PasswordEntry {
     pub created_at: String,
 }
 
+/// DBファイルを所有者のみ読み書きできるようにする（新規作成時も既存ファイルも 600）
+#[cfg(unix)]
+fn restrict_permissions(path: &Path) -> std::io::Result<()> {
+    use std::fs::{OpenOptions, Permissions};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    OpenOptions::new().write(true).create(true).mode(0o600).open(path)?;
+    std::fs::set_permissions(path, Permissions::from_mode(0o600))
+}
+
+#[cfg(not(unix))]
+fn restrict_permissions(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
+        if let Err(e) = restrict_permissions(path) {
+            eprintln!("Warning: failed to restrict permissions of {} ({}).", path.display(), e);
+        }
         let conn = Connection::open(path)?;
+        // 削除・更新した値（旧パスワード等）がファイルの空き領域に残らないようにする
+        conn.execute_batch("PRAGMA secure_delete = ON;")?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS password_history (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +135,77 @@ impl Db {
             params![id, username, password],
         )?;
         Ok(n)
+    }
+
+    /// 全レコードの (ID, 保存されているパスワード) を取得
+    pub fn all_passwords(&self) -> Result<Vec<(i64, String)>> {
+        let mut stmt = self.conn.prepare("SELECT id, password FROM password_history ORDER BY id")?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// 複数レコードのパスワードを1トランザクションで書き換え、VACUUM で旧データを消す
+    pub fn replace_passwords(&mut self, rows: &[(i64, String)]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        for (id, password) in rows {
+            tx.execute(
+                "UPDATE password_history SET password = ?2 WHERE id = ?1",
+                params![id, password],
+            )?;
+        }
+        tx.commit()?;
+        self.conn.execute_batch("VACUUM;")?;
+        Ok(())
+    }
+
+    /// サービスの履歴件数
+    pub fn count_service(&self, service: &str) -> Result<usize> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM password_history WHERE service = ?1",
+            params![service],
+            |row| row.get(0),
+        )
+    }
+
+    /// サービス名を変更（変更した件数を返す）
+    pub fn rename_service(&self, old: &str, new: &str) -> Result<usize> {
+        let n = self.conn.execute(
+            "UPDATE password_history SET service = ?2 WHERE service = ?1",
+            params![old, new],
+        )?;
+        Ok(n)
+    }
+
+    /// 指定IDの (サービス名, ユーザ名, 保存されているパスワード) を取得（該当なしは None）
+    pub fn get_entry(&self, id: i64) -> Result<Option<(String, String, String)>> {
+        match self.conn.query_row(
+            "SELECT service, username, password FROM password_history WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ) {
+            Ok(entry) => Ok(Some(entry)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// 指定IDのレコードを削除（削除したレコードのサービス名を返す。該当なしは None）
+    pub fn delete_entry(&self, id: i64) -> Result<Option<String>> {
+        let service: Option<String> = match self.conn.query_row(
+            "SELECT service FROM password_history WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ) {
+            Ok(s) => Some(s),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e),
+        };
+        if service.is_some() {
+            self.conn.execute("DELETE FROM password_history WHERE id = ?1", params![id])?;
+        }
+        Ok(service)
     }
 
     pub fn delete_service(&self, service: &str) -> Result<usize> {

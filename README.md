@@ -28,69 +28,110 @@ cargo build --release
 ~/.local/share/genpasswd_ex/history.db
 ```
 
+ディレクトリは `700`、DBファイルは `600`（所有者のみ読み書き可）に設定されます。既存のファイルも実行時に同じ権限へ変更されます。
+
+## 暗号化
+
+パスワードは AES-256-GCM で暗号化して DB に保存されます。暗号化鍵は macOS のキーチェーン（サービス `genpasswd_ex` / アカウント `db-key`）に保存され、初回の保存時に自動で作成されます。
+
+- `history` では復号して表示するため、使い方は変わりません
+- 再インストール後などは、初回アクセス時にキーチェーンへのアクセス許可ダイアログが表示されます（「常に許可」を選ぶと以後は表示されません）
+- **キーチェーンの鍵を削除すると、保存済みのパスワードは復号できなくなります**
+- macOS 以外では、環境変数 `GENPASSWD_EX_KEY` に base64 の 32 バイト鍵を指定してください（`openssl rand -base64 32` で生成可）
+
+旧バージョンで保存した平文のパスワードもそのまま表示できます。暗号化するには次を実行してください（念のため事前に DB をバックアップしてください）。
+
+```
+$ genpasswd_ex encrypt
+Encrypted 12 password(s).
+```
+
 ## 使い方
 
 ### パスワードを生成する（保存しない）
 
 ```
-genpasswd_ex [--length <長さ>] [--symbols]
+genpasswd_ex [--length <長さ>] [--symbols] [--no-copy]
 ```
 
 | オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
 | `--length` | `-l` | 16 | パスワードの文字数 |
-| `--symbols` | なし | off | 記号を含める |
+| `--symbols` | `-k` | off | 記号を含める |
+| `--no-copy` | `-n` | off | クリップボードにコピーしない |
 
 ```
 # 16文字（デフォルト）
 $ genpasswd_ex
 Generated password: TDeXIVCda7bEWQts
+Copied to clipboard.
 
 # 24文字・記号あり
 $ genpasswd_ex --length 24 --symbols
 Generated password: ]]:dwmstZjQ9scuU1qLRLgLQ
+Copied to clipboard.
 ```
+
+生成されたパスワードは自動でクリップボードにコピーされます（macOS は `pbcopy`、Linux は `wl-copy` / `xclip` / `xsel` を使用）。コピーに失敗した場合は警告を表示し、処理は続行します。
 
 ---
 
 ### パスワードを生成して履歴に保存する
 
 ```
-genpasswd_ex save <SERVICE> [--username <ユーザ名>] [--length <長さ>] [--symbols]
+genpasswd_ex save --service <SERVICE> [--username <ユーザ名>] [--length <長さ>] [--symbols] [--no-copy]
 ```
 
 | 引数/オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
-| `SERVICE` | — | 必須 | サービス名 |
+| `--service` | `-s` | 必須 | サービス名 |
 | `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 | `--length` | `-l` | 16 | パスワードの文字数 |
-| `--symbols` | なし | off | 記号を含める |
+| `--symbols` | `-k` | off | 記号を含める |
+| `--no-copy` | `-n` | off | クリップボードにコピーしない |
 
 ```
 # ユーザ名なし
-$ genpasswd_ex save github
+$ genpasswd_ex save -s github
 Generated password: CW5HsZlYxIib2Ut4
+Copied to clipboard.
 Saved to history for service "github".
 
 # ユーザ名あり・20文字・記号あり
-$ genpasswd_ex save github --username octocat --length 20 --symbols
+$ genpasswd_ex save -s github --username octocat --length 20 --symbols
 Generated password: (*>asM70MQrmdd1mM5bT
+Copied to clipboard.
 Saved to history for service "github" (user: octocat).
 ```
 
-生成されたパスワードは標準出力、保存メッセージは標準エラー出力に書き出されます。
+生成されたパスワードは標準出力、コピー・保存メッセージは標準エラー出力に書き出されます。
 
 ---
 
 ### サービスの履歴を確認する
 
 ```
-genpasswd_ex history <SERVICE>
+genpasswd_ex history [--service <SERVICE>]
+```
+
+`--service`（`-s`）を省略すると、全サービスの履歴をサービスごとに表示します。この場合パスワードは `********` とマスク表示されます（平文で確認するには `-s` でサービスを指定してください）。
+
+```
+$ genpasswd_ex history
+=== aws (1 record(s)) ==========================================================
+  ID  Username              Password              Created At
+--------------------------------------------------------------------------------
+   3  -                     ********              2026-07-07T08:10:12.512331+09:00
+
+=== github (1 record(s)) =======================================================
+  ID  Username              Password              Created At
+--------------------------------------------------------------------------------
+   7  octocat               ********              2026-07-07T08:07:54.151484+09:00
 ```
 
 ```
-$ genpasswd_ex history github
-History for "github":
+$ genpasswd_ex history -s github
+=== github (3 record(s)) =======================================================
   ID  Username              Password              Created At
 --------------------------------------------------------------------------------
    7  octocat               YWXWA3xS402Wl5JKMmsQ  2026-07-07T08:07:54.151484+09:00
@@ -98,7 +139,22 @@ History for "github":
    1  -                     (*>asM70MQrmdd1mM5bT  2026-07-07T08:01:39.249806+09:00
 ```
 
-新しいパスワードが先頭に表示されます。ユーザ名未設定の場合は `-` と表示されます。
+サービスの見出しは `=` の罫線で表示されます（端末への出力時は太字・色付き。環境変数 `NO_COLOR` を設定すると色なし）。新しいパスワードが先頭に表示されます。ユーザ名未設定の場合は `-` と表示されます。
+
+---
+
+### 履歴のパスワードをクリップボードにコピーする
+
+```
+genpasswd_ex copy <ID>
+```
+
+```
+$ genpasswd_ex copy 7
+Copied password of ID 7 (service "github", user: octocat) to clipboard.
+```
+
+ID は `history` で確認してください（`-s` を省略したマスク表示の ID でも使えます）。パスワードは画面に表示されず、クリップボードにのみコピーされます。コピーに失敗した場合はエラーになります。
 
 ---
 
@@ -118,22 +174,24 @@ github       4
 
 ---
 
-### 既存のパスワードを履歴に登録する
+### 既存のパスワードを履歴に追加する
 
 ```
-genpasswd_ex register <SERVICE> <PASSWORD> [--username <ユーザ名>]
+genpasswd_ex add --service <SERVICE> <PASSWORD> [--username <ユーザ名>]
 ```
 
 | 引数/オプション | 短縮 | デフォルト | 説明 |
 |---|---|---|---|
-| `SERVICE` | — | 必須 | サービス名 |
-| `PASSWORD` | — | 必須 | 登録するパスワード |
+| `--service` | `-s` | 必須 | サービス名 |
+| `PASSWORD` | — | 必須 | 追加するパスワード |
 | `--username` | `-u` | 履歴の最新ユーザ名 | サービスのユーザ名（省略時は同サービスの履歴にある最新のユーザ名。履歴になければ空） |
 
 ```
-$ genpasswd_ex register github myP@ssw0rd --username octocat
-Registered to history for service "github" (user: octocat).
+$ genpasswd_ex add -s github myP@ssw0rd --username octocat
+Added to history for service "github" (user: octocat).
 ```
+
+旧コマンド名 `register` も別名として引き続き使えます。
 
 ---
 
@@ -163,14 +221,50 @@ Updated history entry ID 15.
 
 ---
 
+### サービス名を変更する
+
+```
+genpasswd_ex rename --service <SERVICE> <NEW_SERVICE> [--merge]
+```
+
+| 引数/オプション | 短縮 | 説明 |
+|---|---|---|
+| `--service` | `-s` | 現在のサービス名（必須） |
+| `NEW_SERVICE` | — | 新しいサービス名（必須） |
+| `--merge` | なし | 変更先のサービスが既にある場合に履歴を統合する |
+
+```
+$ genpasswd_ex rename -s google Google
+Renamed service "google" to "Google" (1 record(s)).
+```
+
+変更先のサービス名に履歴が既にある場合は、誤って統合しないようエラーになります。統合する場合は `--merge` を指定してください。
+
+---
+
+### 履歴を1件削除する
+
+```
+genpasswd_ex remove <ID>
+```
+
+```
+$ genpasswd_ex remove 5
+Removed history entry ID 5 (service "github").
+```
+
+ID は `history` で確認してください。
+
+---
+
 ### サービスの履歴を削除する
 
 ```
-genpasswd_ex delete <SERVICE>
+genpasswd_ex delete --service <SERVICE>
 ```
 
 ```
-$ genpasswd_ex delete aws
+$ genpasswd_ex delete -s aws
 Deleted 2 record(s) for service "aws".
 ```
 
