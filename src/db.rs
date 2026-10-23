@@ -178,6 +178,19 @@ impl Db {
         Ok(n)
     }
 
+    /// 指定IDの (サービス名, ユーザ名, 保存されているパスワード) を取得（該当なしは None）
+    pub fn get_entry(&self, id: i64) -> Result<Option<(String, String, String)>> {
+        match self.conn.query_row(
+            "SELECT service, username, password FROM password_history WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ) {
+            Ok(entry) => Ok(Some(entry)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// 指定IDのレコードを削除（削除したレコードのサービス名を返す。該当なしは None）
     pub fn delete_entry(&self, id: i64) -> Result<Option<String>> {
         let service: Option<String> = match self.conn.query_row(

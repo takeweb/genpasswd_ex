@@ -16,6 +16,7 @@ use unicode_width::UnicodeWidthStr;
   genpasswd_ex save -s <SERVICE> -u <USERNAME> [-l <LENGTH>] [-k] [-n]
   genpasswd_ex add -s <SERVICE> '<PASSWORD>' -u <USERNAME>
   genpasswd_ex history [-s <SERVICE>]
+  genpasswd_ex copy <ID>
   genpasswd_ex rename -s <SERVICE> <NEW_SERVICE>
   genpasswd_ex remove <ID>
   genpasswd_ex delete -s <SERVICE>
@@ -67,6 +68,11 @@ enum Command {
         /// Service name (omit to show all services; passwords are masked)
         #[arg(short, long)]
         service: Option<String>,
+    },
+    /// Copy the password of a history entry to the clipboard
+    Copy {
+        /// Entry ID (shown in `history`)
+        id: i64,
     },
     /// List all services with saved passwords
     List,
@@ -126,6 +132,19 @@ fn pad(s: &str, width: usize) -> String {
     let display_width = s.width();
     let spaces = width.saturating_sub(display_width);
     format!("{}{}", s, " ".repeat(spaces))
+}
+
+/// history のサービス見出し（`=` の罫線で囲み、端末なら太字・色付きで表示）
+fn print_service_header(service: &str, count: usize) {
+    use std::io::IsTerminal;
+
+    let title = format!("=== {} ({} record(s)) ", service, count);
+    let line = format!("{}{}", title, "=".repeat(80usize.saturating_sub(title.width())));
+    if std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() {
+        println!("\x1b[1;36m{}\x1b[0m", line);
+    } else {
+        println!("{}", line);
+    }
 }
 
 /// ユーザ名が省略された場合、同じサービスの履歴にある最新のユーザ名を使う
@@ -252,7 +271,7 @@ fn main() {
                     println!("No history for service \"{}\".", service);
                     continue;
                 }
-                println!("History for \"{}\":", service);
+                print_service_header(service, entries.len());
                 println!("{:>4}  {:<20}  {:<20}  {}", "ID", "Username", "Password", "Created At");
                 println!("{}", "-".repeat(80));
                 for e in &entries {
@@ -265,6 +284,27 @@ fn main() {
                     };
                     println!("{:>4}  {:<20}  {:<20}  {}", e.id, user, pwd, e.created_at);
                 }
+            }
+        }
+
+        Some(Command::Copy { id }) => {
+            let db = db::Db::open(&db_path()).expect("Failed to open database");
+            let Some((service, username, stored)) = db.get_entry(id).expect("Failed to read history") else {
+                eprintln!("Error: no history entry with ID {}.", id);
+                std::process::exit(1);
+            };
+            let pwd = load_cipher().decrypt(&stored).unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            });
+            if let Err(e) = clipboard::copy(&pwd) {
+                eprintln!("Error: failed to copy to clipboard ({}).", e);
+                std::process::exit(1);
+            }
+            if username.is_empty() {
+                println!("Copied password of ID {} (service \"{}\") to clipboard.", id, service);
+            } else {
+                println!("Copied password of ID {} (service \"{}\", user: {}) to clipboard.", id, service, username);
             }
         }
 
