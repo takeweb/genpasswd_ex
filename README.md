@@ -143,6 +143,21 @@ $ genpasswd_ex history -s github
 
 ---
 
+### 履歴のパスワードをクリップボードにコピーする
+
+```
+genpasswd_ex copy <ID>
+```
+
+```
+$ genpasswd_ex copy 7
+Copied password of ID 7 (service "github", user: octocat) to clipboard.
+```
+
+ID は `history` で確認してください（`-s` を省略したマスク表示の ID でも使えます）。パスワードは画面に表示されず、クリップボードにのみコピーされます。コピーに失敗した場合はエラーになります。
+
+---
+
 ### 登録済みサービス一覧を表示する
 
 ```
